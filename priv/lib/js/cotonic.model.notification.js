@@ -28,14 +28,17 @@ var cotonic = cotonic || {};
             let called = false;
 
             function cb(result) {
-                if(called) return;
+                if(called) {
+                    return;
+                }
 
                 called = true;
 
-                publishCurrentState();
+                reportCurrentState();
                 maybeRespond(result, msg);
             }
 
+            // Some older browsers have a 
             const promise = Notification.requestPermission(cb);
             if(promise && typeof promise.then === "function") {
                 promise.then(cb)
@@ -43,7 +46,7 @@ var cotonic = cotonic || {};
         }
     }
 
-    function publishCurrentState() {
+    function reportCurrentState() {
         let state;
 
         if(!window.Notification) {
@@ -56,10 +59,9 @@ var cotonic = cotonic || {};
     }
 
     function init() {
-        publishCurrentState();
+        reportCurrentState();
 
         cotonic.broker.subscribe("model/notification/post/requestPermission", requestPermission);
-
         cotonic.broker.publish("model/notification/event/ping", "pong", { retain: true });
     }
 
