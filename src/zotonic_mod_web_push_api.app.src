@@ -1,0 +1,10 @@
+{application, zotonic_mod_web_push_api, [
+    {description, "Web Push API for Zotonic."},
+    {vsn, "git"},
+    {registerered, []},
+    {applications, [kernel, stdlib, zotonic_core]},
+    {env, []},
+    {modules, []},
+    {maintainers, []}
+]}.
+
