@@ -20,7 +20,7 @@ var cotonic = cotonic || {};
 "use strict";
 
     function getRegistration() {
-        return new Promise(function(resolve, reject) {
+        return new Promise((resolve, reject) => {
             if(!navigator.serviceWorker) {
                 throw new Error("No service worker")
             }
@@ -31,7 +31,7 @@ var cotonic = cotonic || {};
     
     function getSubscription() {
         return getRegistration()
-            .then(function(registration) {
+            .then(registration => {
                 if(!registration.pushManager) {
                     throw new Error("No push manager");
                 }
@@ -42,11 +42,11 @@ var cotonic = cotonic || {};
 
     function unsubscribe(msg) {
         getSubscription()
-            .then(function(subscription) {
+            .then(subscription => {
                 if(subscription === null) {
                     maybeRespond(true, msg);
                 } else {
-                    return subscription.unsubscribe();
+                    subscription.unsubscribe();
                 }
             })
             .then(function(result) {
@@ -59,21 +59,22 @@ var cotonic = cotonic || {};
 
     function subscribe(msg) {
         getRegistration()
-            .then(function(registration) {
-                if(registration.pushManager) {
-                    return registration.pushManager.subscribe(msg.payload)
-                } else {
-                    throw new Error("No push manager")
-                }
-            })
-            .then(function(subscription) {
-                reportCurrentState();
-                maybeRespond(subscription, msg);
-            })
-            .catch(function(err) {
-                reportCurrentState();
-                maybeRespond({error: err});
-            })
+        .then(registration => {
+            if(registration.pushManager) {
+                return registration.pushManager.subscribe(msg.payload);
+            } else {
+                throw new Error("No push manager");
+            }
+        })
+        .then(subscription => {
+            reportCurrentState();
+            maybeRespond(subscription?subscription.toJSON():null, msg);
+        })
+        .catch(function(err) {
+             console.warn(err);
+             reportCurrentState();
+             maybeRespond({error: err}, msg);
+        })
     }
 
     function publishCurrentState(state) {
@@ -82,19 +83,24 @@ var cotonic = cotonic || {};
     
     function reportCurrentState() {
         getSubscription()
-            .then(function(subscription) {
-                if(subscription) {
-                    publishCurrentState(true);
-                } else {
-                    publishCurrentState(false);
-                }
-            })
-            .catch(function(err) {
+        .then(function(subscription) {
+            if(subscription) {
+                publishCurrentState(true);
+            } else {
                 publishCurrentState(false);
-            })
+            }
+        })
+        .catch(function(err) {
+            publishCurrentState(false);
+        })
     }
     
     function init() {
+        cotonic.broker.subscribe("model/webPush/get/subscription", function(msg) {
+            getSubscription()
+            .then(subscription => maybeRespond(subscription?subscription.toJSON():null, msg))
+        });
+
         cotonic.broker.subscribe("model/webPush/post/subscribe", subscribe);
         cotonic.broker.subscribe("model/webPush/post/unsubscribe", unsubscribe);
 
@@ -108,7 +114,7 @@ var cotonic = cotonic || {};
     }
 
     function maybeRespond(result, msg) {
-        if(msg.properties.response_topic) {
+        if(msg && msg.properties.response_topic) {
             cotonic.broker.publish(msg.properties.response_topic, result);
         }
     }
