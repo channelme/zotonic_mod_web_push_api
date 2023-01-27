@@ -34,7 +34,9 @@
 
 -export([
     encrypt/3,
-    make_audience/1
+    make_audience/1,
+
+    send_push/3, send_push/5
 ]).
 
 init(_Context) ->
@@ -115,37 +117,35 @@ create_context(ClientPublicKey, ServerPublicKey) when size(ClientPublicKey) == 6
 create_info(Type, CryptoContext) when byte_size(CryptoContext) == 135 ->
     <<"Content-Encoding: ", Type/binary, 0, "P-256", CryptoContext/binary>>.
 
-get_headers(Audience, Expiration, Context) ->
-    ExpirationTimestamp = z_datetime:timestamp() + Expiration,
 
-    PublicKey = base64url:decode(m_config:get_value(?MODULE, public_key, Context)),
-    PrivateKey = base64url:decode(m_config:get_value(?MODULE, private_key, Context)),
-    SubjectEmail = z_convert:to_binary(m_config:get_value(?MODULE, subject_email, Context)),
+send_push(Message, Subscription, Context) ->
+    send_push(Message, Subscription, nil, 0, Context).
 
-    Payload = jsx:encode(#{ aud => Audience, exp => ExpirationTimestamp, sub => SubjectEmail }),
+send_push(Message, #{ endpoint := Endpoint }=Subscription, AuthToken, TTL, Context) ->
+    Payload = encrypt(Message, Subscription, 0),
+    Audience = make_audience(Endpoint),
 
-    jwk =
-      if otp_version < 24 do
-        {:ECPrivateKey, 1, private_key, {:namedCurve, {1, 2, 840, 10045, 3, 1, 7}}, public_key}
-      else
-        {:ECPrivateKey, 1, private_key, {:namedCurve, {1, 2, 840, 10045, 3, 1, 7}}, public_key,
-         nil}
-      end
-      |> JOSE.JWK.from_key()
+    ?DEBUG(Payload),
 
-    {_, jwt} = JOSE.JWS.compact(JOSE.JWT.sign(jwk, %{"alg" => "ES256"}, payload))
-    headers(content_encoding, jwt, vapid[:public_key])
+    Headers = [
+               { <<"TTL">>, z_convert:to_binary(TTL) },
+               { <<"Content-Encoding">>, <<"aesgcm">> },
+               { <<"Encryption">>, <<"salt=", (base64url:encode(maps:get(salt, Payload)))/binary >> }
 
+               | get_headers(Audience, base64url:encode(maps:get(server_public_key, Payload)), 12 * 3600, Context)
+              ],
 
-send_push(Message, #{ endpoint := Endpoint }=Subscription, AuthToken, TTL) ->
-    Payload = encrypt(Message, Subscription),
+    ?DEBUG(Headers),
 
-    Audience = make_audience(Endpoint)
+    Request = {
+      Endpoint,
+      Headers,
+      [<<"application/octetstream">>],
+      maps:get(ciphertext, Payload)
+     },
 
-    Headers = [],
+    ?DEBUG(httpc:request(post, Request, [{ssl, [{versions, ["tlsv1.2"]}]}], [])),
 
-
-    % Auth = crypto:sign(, )
     ok.
 
 hkdf(IKM, Info, Salt, Length) ->
@@ -170,4 +170,41 @@ make_padding(Length) ->
 make_audience(Endpoint) ->
     #{ scheme := Scheme, host := Host } = uri_string:parse(Endpoint),
     <<Scheme/binary, "://", Host/binary>>.
+
+get_headers(Audience, ServerPublicKey, Expiration, Context) ->
+    ExpirationTimestamp = z_datetime:timestamp() + Expiration,
+
+    PublicKey = m_config:get_value(?MODULE, public_key, Context),
+    PrivateKey = m_config:get_value(?MODULE, private_key, Context),
+    SubjectEmail = z_convert:to_binary(m_config:get_value(?MODULE, subject_email, Context)),
+
+    Payload = #{ aud => Audience,
+                 exp => ExpirationTimestamp,
+                 sub => SubjectEmail },
+
+    JWK = to_jwk_key(PublicKey, PrivateKey),
+    JWT = erljwt:create(es256, Payload, JWK),
+
+    [{<<"Authorization">>, <<"WebPush ", JWT/binary>> },
+     {<<"Crypto-Key">>, <<"dh=", ServerPublicKey/binary, $;, "p256ecd=", PublicKey/binary>>}
+     ].
+
+to_jwk_key(PublicKey, PrivateKey) ->
+    PK = base64url:decode(PublicKey),
+    {X, Y} = public_key_to_x_y(PK),
+    
+    #{ d => PrivateKey,
+       kty => <<"EC">>,
+       crv => <<"P-256">>,
+       x => base64url:encode(X),
+       y => base64url:encode(Y)
+     }.
+
+public_key_to_x_y(<< 16#04, X:32/binary, Y:32/binary >>) ->
+    {X, Y};
+public_key_to_x_y(<< 16#04, X:48/binary, Y:48/binary >>) ->
+    {X, Y};
+public_key_to_x_y(<< 16#04, X:66/binary, Y:66/binary >>) ->
+    {X, Y}.
+
 
