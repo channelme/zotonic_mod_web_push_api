@@ -36,6 +36,8 @@
     encrypt/3,
     make_audience/1,
 
+    send/3,
+
     send_push/3, send_push/5
 ]).
 
@@ -118,6 +120,26 @@ create_info(Type, CryptoContext) when byte_size(CryptoContext) == 135 ->
     <<"Content-Encoding: ", Type/binary, 0, "P-256", CryptoContext/binary>>.
 
 
+%% Exported api to send messages to a specific user id
+send(UserId, Message, Context) ->
+    Payload = jsx:encode(Message),
+
+    case m_identity:get_rsc_by_type(UserId, web_push_api_subscription, Context) of
+        [] ->
+            ?LOG_WARNING(#{text => <<"No web push api subscriptions found">>,
+                           user_id => UserId
+                          }),
+            ok;
+        Subscriptions ->
+            [ begin
+                  S = proplists:get_value(propb, SubProps),
+                  send_push(Payload, S, Context)
+              end || SubProps <- Subscriptions ],
+            ok
+    end.
+
+
+%% Note fixed TTL.
 send_push(Message, Subscription, Context) ->
     send_push(Message, Subscription, nil, 0, Context).
 
@@ -127,10 +149,12 @@ send_push(Message, #{ endpoint := Endpoint }=Subscription, AuthToken, TTL, Conte
 
     ?DEBUG(Payload),
 
+    %% Note in OTP24, the keys have to be erlang strings. From 15.2.2 on these
+    %% can be binaries as well.
     Headers = [
-               { <<"TTL">>, z_convert:to_binary(TTL) },
-               { <<"Content-Encoding">>, <<"aesgcm">> },
-               { <<"Encryption">>, <<"salt=", (base64url:encode(maps:get(salt, Payload)))/binary >> }
+               { "TTL", z_convert:to_binary(TTL) },
+               { "Content-Encoding", <<"aesgcm">> },
+               { "Encryption", <<"salt=", (base64url:encode(maps:get(salt, Payload)))/binary >> }
 
                | get_headers(Audience, base64url:encode(maps:get(server_public_key, Payload)), 12 * 3600, Context)
               ],
@@ -140,11 +164,11 @@ send_push(Message, #{ endpoint := Endpoint }=Subscription, AuthToken, TTL, Conte
     Request = {
       Endpoint,
       Headers,
-      [<<"application/octetstream">>],
+      "application/octetstream",
       maps:get(ciphertext, Payload)
      },
 
-    ?DEBUG(httpc:request(post, Request, [{ssl, [{versions, ["tlsv1.2"]}]}], [])),
+    ?DEBUG(httpc:request(post, Request, [{ssl, [{versions, ['tlsv1.2', 'tlsv1.3']}]}], [])),
 
     ok.
 
@@ -182,11 +206,13 @@ get_headers(Audience, ServerPublicKey, Expiration, Context) ->
                  exp => ExpirationTimestamp,
                  sub => SubjectEmail },
 
+    ?DEBUG(Payload),
+
     JWK = to_jwk_key(PublicKey, PrivateKey),
     JWT = erljwt:create(es256, Payload, JWK),
 
-    [{<<"Authorization">>, <<"WebPush ", JWT/binary>> },
-     {<<"Crypto-Key">>, <<"dh=", ServerPublicKey/binary, $;, "p256ecd=", PublicKey/binary>>}
+    [{"Authorization", <<"WebPush ", JWT/binary>> },
+     {"Crypto-Key", <<"dh=", ServerPublicKey/binary, $;, "p256ecdsa=", PublicKey/binary>>}
      ].
 
 to_jwk_key(PublicKey, PrivateKey) ->
@@ -206,5 +232,4 @@ public_key_to_x_y(<< 16#04, X:48/binary, Y:48/binary >>) ->
     {X, Y};
 public_key_to_x_y(<< 16#04, X:66/binary, Y:66/binary >>) ->
     {X, Y}.
-
 
