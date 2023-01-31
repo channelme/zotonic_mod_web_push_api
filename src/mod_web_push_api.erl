@@ -27,6 +27,8 @@
 -include_lib("zotonic_core/include/zotonic.hrl").
 -include_lib("stdlib/include/assert.hrl").
 
+-define(MAX_PAYLOAD_LENGTH, 4078).
+
 -export([
     init/1,
     event/2
@@ -80,7 +82,8 @@ event(#postback{message={store_subscription, _Args}}, Context) ->
             Context
     end.
 
-encrypt(Message, #{ keys := Keys }=Subscription, PaddingLength) ->
+encrypt(Message, #{ keys := Keys }, PaddingLength)
+  when byte_size(Message) + PaddingLength =< ?MAX_PAYLOAD_LENGTH ->
     Padding = make_padding(PaddingLength),
 
     Plaintext = <<Padding/binary, Message/binary>>,
@@ -96,16 +99,15 @@ encrypt(Message, #{ keys := Keys }=Subscription, PaddingLength) ->
     {ServerPublicKey, ServerPrivateKey} = crypto:generate_key(ecdh, prime256v1),
 
     SharedSecret = crypto:compute_key(ecdh, ClientPublicKey, ServerPrivateKey, prime256v1),
-
-    Prk = hkdf(ClientAuthToken, SharedSecret, <<"Content-Encoding: auth", 0>>, 32),
+    Prk = hkdf(SharedSecret, <<"Content-Encoding: auth", 0>>, ClientAuthToken, 32),
 
     CryptoContext = create_context(ClientPublicKey, ServerPublicKey),
     
     ContentEncryptionKeyInfo = create_info(<<"aesgcm">>, CryptoContext),
-    ContentEncryptionKey = hkdf(Salt, Prk, ContentEncryptionKeyInfo, 16),
+    ContentEncryptionKey = hkdf(Prk, ContentEncryptionKeyInfo, Salt, 16),
 
     NonceInfo = create_info(<<"nonce">>, CryptoContext),
-    Nonce = hkdf(Salt, Prk, NonceInfo, 12),
+    Nonce = hkdf(Prk, NonceInfo, Salt, 12),
 
     Ciphertext = encrypt_payload(Plaintext, ContentEncryptionKey, Nonce),
 
@@ -114,7 +116,7 @@ encrypt(Message, #{ keys := Keys }=Subscription, PaddingLength) ->
       server_public_key => ServerPublicKey}.
 
 create_context(ClientPublicKey, ServerPublicKey) when size(ClientPublicKey) == 65 andalso size(ServerPublicKey) == 65 -> 
-  <<0, 65:16/unsigned-big-integer, ClientPublicKey/binary, 65:16/unsigned-big-integer, ServerPublicKey/binary>>.
+    <<0, 65:16/unsigned-big-integer, ClientPublicKey/binary, 65:16/unsigned-big-integer, ServerPublicKey/binary>>.
 
 create_info(Type, CryptoContext) when byte_size(CryptoContext) == 135 ->
     <<"Content-Encoding: ", Type/binary, 0, "P-256", CryptoContext/binary>>.
@@ -174,7 +176,8 @@ send_push(Message, #{ endpoint := Endpoint }=Subscription, AuthToken, TTL, Conte
 
 hkdf(IKM, Info, Salt, Length) ->
     Prk = crypto:mac(hmac, sha256, Salt, IKM),
-    binary:part(crypto:mac(hmac, sha256, Prk, <<Info/binary, 1>>), 0, Length).
+    InfoMac = crypto:mac(hmac, sha256, Prk, <<Info/binary, 1>>),
+    binary:part(InfoMac, 0, Length).
 
 encrypt_payload(Plaintext, ContentEncryptionKey, Nonce) ->
     {Ciphertext, Ciphertag} = crypto:crypto_one_time_aead(
