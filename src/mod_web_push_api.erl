@@ -29,6 +29,11 @@
 
 -define(MAX_PAYLOAD_LENGTH, 4078).
 
+%%
+%% Push API documentation for the server side communication. 
+%% https://autopush.readthedocs.io/en/latest/http.html
+%%
+
 -export([
     init/1,
     event/2
