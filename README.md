@@ -36,7 +36,7 @@ The zotonic admin panel has a new side panel which can be used to subscribe the 
 
 # TODO
 
-- [ ] Queing notifications when the endpoint errors or is offline.
-- [ ] Retry sending notifications.
-- [ ] Add configuration panel to the admin.
+- [x] Queing notifications when the endpoint errors or is offline.
+- [x] Retry sending notifications.
+- [x] Add configuration panel to the admin.
 - [ ] Setup ssl validation for the endpoint connections.
