@@ -33,6 +33,29 @@
 %% https://autopush.readthedocs.io/en/latest/http.html
 %%
 
+%% 
+%% Example::
+%%
+%% ```
+%% mod_web_push_api:send(1, #{ type => notification,
+%%                             data => #{ title => <<"Hello">>,
+%%                                        options => #{ body => <<"World">>,
+%%                                                      data => #{ url => <<"/page/123">> }
+%%                                                    }
+%%                                     }
+%%                          },
+%%                          #{ ttl => 3600 },
+%%                          z:c(site_cafe)).
+%% ```
+%%
+%% When this message is received by to cotonic service worker the 
+%% `showNotification` method of the registration will be called. 
+%% See: https://developer.mozilla.org/en-US/docs/Web/API/ServiceWorkerRegistration/showNotification
+%%
+%% The optional data field in the notification can be used by the service worker to
+%% redirect the user to the correct page.
+%%
+
 -export([
     init/1,
     event/2
@@ -70,7 +93,6 @@ event(#postback{message={store_subscription, _Args}}, Context) ->
                                     Subscription#{ expirationTime => ExpirationTime }
                             end,
 
-            %%ApplicationServerKey = base64:decode(maps:get(<<"applicationServerKey">>, Options)),
             %% The hash of the application server key under which the subscription was stored.
             %% [TODO] Check if het key auth gedeelte gebruikt kan worden als Id van de subscription.
             KeyHash = z_utils:hex_sha(base64url:decode(m_web_push_api:public_key(Context))),
@@ -207,7 +229,7 @@ unique_key(Id, Message, _Options) ->
      Phash = z_convert:to_binary(erlang:phash2({Id, Message})),
      <<"push-api-", Phash/binary>>.
 
-
+% Retry sending the notification when the TTL > 0.
 maybe_retry(#{ ttl := 0 }) ->
     %% No retry needed when TTL = 0
     ok;
