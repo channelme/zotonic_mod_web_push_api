@@ -34,6 +34,11 @@ The zotonic admin panel has a new side panel which can be used to subscribe the 
 > mod_web_push_api:send(1, #{ type => notification, data => #{ title => <<"Hello">>, options => #{ body => <<"World">>, data => #{ url => <<"/page/123">>} }}}, #{ ttl => 3600 }, z:c(your_site)).
 ```
 
+This will sent a notification to all currently setop subscriptions for user 1 (Admin). When a subscription has been setup the notification will be received by the service worker of the browser, which will display the notification.
+
+<img width="394" alt="Screen Shot 2023-02-03 at 16 18 21" src="https://user-images.githubusercontent.com/1024972/216640147-760b74de-3df6-4d8e-82c6-30848e8317bd.png">
+
+
 # TODO
 
 - [x] Queing notifications when the endpoint errors or is offline.
