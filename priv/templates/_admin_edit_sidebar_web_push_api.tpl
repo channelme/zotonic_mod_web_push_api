@@ -47,8 +47,10 @@
                  .then( () => cotonic.broker.call("model/webPush/get/subscription") )
                  .then( (msg) => {
                      const subscription = msg.payload;
-                     if(subscription) {
+                     if(subscription && subscription.endpoint) {
                          cotonic.broker.publish("webPush/event/subscribed");
+                     } else if (subscription && subscription.error) {
+                         cotonic.broker.publish("webPush/event/not_supported");
                      } else {
                          cotonic.broker.publish("webPush/event/unsubscribed");
                      }

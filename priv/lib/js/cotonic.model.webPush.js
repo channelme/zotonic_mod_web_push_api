@@ -86,7 +86,7 @@ var cotonic = cotonic || {};
     function reportCurrentState() {
         getSubscription()
         .then((subscription) => {
-            if(subscription) {
+            if(subscription && subscription.endpoint) {
                 publishCurrentState(true);
             } else {
                 publishCurrentState(false);
@@ -98,19 +98,20 @@ var cotonic = cotonic || {};
     }
     
     function init() {
-        cotonic.broker.subscribe("model/webPush/get/subscription", function(msg) {
+        cotonic.broker.subscribe("model/webPush/get/subscription", (msg) => {
             getSubscription()
-            .then(subscription => maybeRespond(subscription?subscription.toJSON():null, msg))
+            .then(subscription => {
+                maybeRespond(subscription?subscription.toJSON():null, msg)
+            })
+            .catch(err => {
+                maybeRespond({error: err}, msg)
+            })
         });
 
         cotonic.broker.subscribe("model/webPush/post/subscribe", subscribe);
         cotonic.broker.subscribe("model/webPush/post/unsubscribe", unsubscribe);
 
         cotonic.broker.publish("model/webPush/event/ping", "pong", { retain: true });
-
-        if(!navigator.serviceWorker) {
-            console.log("serviceWorker not supported");
-        }
 
         reportCurrentState();
     }
