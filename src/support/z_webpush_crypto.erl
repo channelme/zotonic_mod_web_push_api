@@ -60,7 +60,6 @@ make_request(Message, #{ endpoint := Endpoint }=Subscription, Options, Context) 
                    Topic ->
                        [ {"Topic", z_convert:to_binary(Topic)} | Headers ]
                end,
-    ?DEBUG(Headers1),
 
    { Endpoint, Headers1, "application/octetstream", CipherText }.
 

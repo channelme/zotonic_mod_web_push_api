@@ -39,10 +39,15 @@
 ]).
 
 -export([
-    send/3, send/4
+    send/3, send/4,
+
+    task_send/4,
+
+    retry_value/1
 ]).
 
 init(_Context) ->
+    start_httpc_profile(),
     ok.
 
 event(#postback{message={store_subscription, _Args}}, Context) ->
@@ -87,8 +92,6 @@ send(UserId, Message, Context) ->
     send(UserId, Message, #{ ttl => 0 }, Context).
 
 send(UserId, Message, Options, Context) ->
-    Payload = jsx:encode(Message),
-
     case m_identity:get_rsc_by_type(UserId, web_push_api_subscription, Context) of
         [] ->
             ?LOG_WARNING(#{text => <<"No web push api subscriptions found">>,
@@ -97,18 +100,117 @@ send(UserId, Message, Options, Context) ->
             ok;
         Subscriptions ->
             [ begin
-                  Subscription = proplists:get_value(propb, SubProps),
-                  send_push(Payload, Subscription, Options, Context)
-              end || SubProps <- Subscriptions ],
+                  {id, Id} = proplists:lookup(id, Subscription),
+                  UniqueKey = unique_key(Id, Message, Options),
+                  z_pivot_rsc:insert_task_after(0, ?MODULE, task_send, UniqueKey, [Id, Message, Options], Context)
+              end || Subscription <- Subscriptions ],
+
+            %% Trigger a poll of the pivot queue to allow push messages to be sent
+            z_pivot_rsc:poll(Context),
             ok
     end.
+
+% @doc Send the push notification. Async called by the task manager.
+task_send(Id, Message, Options, Context) ->
+    Payload = jsx:encode(Message),
+
+    case m_identity:get(Id, Context) of
+        undefined ->
+            %% The subscription is probably deleted.
+            ok;
+        Props ->
+            Subscription = proplists:get_value(propb, Props),
+
+            case send_push(Payload, Subscription, Options, Context) of
+                ok ->
+                    ok;
+                {delay, After} ->
+                    ?LOG_INFO(#{text => <<"Endpoint requested retry">>, 'after' => After }),
+                    {delay, After};
+                remove_subscription ->
+                    ?LOG_INFO(#{text => <<"Endpoint requested subscription deletion">>, id => Id }),
+                    m_identity:delete(Id, Context),
+                    ok
+            end
+    end.
+
+%%
+%% Helpers
+%%
+
+start_httpc_profile() ->
+    inets:start(httpc, [{profile, ?MODULE}]).
 
 send_push(Message, Subscription, Options, Context) ->
     Request = z_webpush_crypto:make_request(Message, Subscription, Options, Context),
 
-    ?DEBUG(httpc:request(post, Request, [{ssl, [{versions, ['tlsv1.2', 'tlsv1.3']}]}], [])),
+    %% TODO ssl certificate check.
+    case httpc:request(post, Request, [{ssl, [{versions, ['tlsv1.2', 'tlsv1.3']}]}], [], ?MODULE) of
+        {ok, {{_, 201, _}, _ResponseHeaders, _Body}} ->
+            %% Ok... message recognized and sent.
+            ok;
+        {ok, {{_, 404, _}, _ResponseHeaders, _Body}} ->
+            %% Not Found
+            remove_subscription;
+        {ok, {{_, 410, _}, _ResponseHeaders, _Body}} ->
+            %% Gone
+            remove_subscription;
+        {ok, {{_, 429, _}, ResponseHeaders, _Body}} ->
+            After = get_retry_after(ResponseHeaders),
+            {delay, After};
+        {ok, {{_, Code, _}, _ResponseHeaders, _Body}} when Code >= 400 andalso Code < 500 ->
+            %% Request error... report and drop;
+            ?LOG_ERROR(#{text => <<"Could not send push message: request error.">>,
+                         error => Code
+                        }),
+            ok;
+        {ok, {{_, Code, _}, _ResponseHeaders, _Body}} when Code >= 500 andalso Code < 600 ->
+            %% Server error... retry later
+            ?LOG_ERROR(#{text => <<"Could not send push message: server error">>,
+                         error => Code
+                        }),
+            maybe_retry(Options);
+        {error, Err} ->
+            %% Server not reachable... retry later.
+            ?LOG_ERROR(#{text => <<"Could not send push message.">>,
+                         error => Err }),
+            maybe_retry(Options)
+    end.
 
-    ok.
+%% Get the retry after value from the response headers.
+get_retry_after([]) ->
+    120;
+get_retry_after([{H, V} | Rest]) ->
+    case z_string:to_lower(H) of
+        <<"retry-after">> ->
+            retry_value(V);
+        _ ->
+            get_retry_after(Rest)
+    end.
+
+%% The retry value can either be a http-date or an integer.
+retry_value(Value) ->
+    case catch cow_date:parse_date(Value) of
+        {{_,_,_},{_,_,_}}=Date ->
+            Date;
+        {'EXIT', _} ->
+            z_convert:to_integer(Value)
+    end.
+
+% Make a unique key, which optionally uses the topic option
+% of the message. This allows updating messages while they
+% are in the task-queue for retrying.
+unique_key(Id, _Message, #{ topic := Topic }) ->
+     Phash = z_convert:to_binary(erlang:phash2({Id, Topic})),
+     <<"push-api-", Phash/binary>>;
+unique_key(Id, Message, _Options) ->
+     Phash = z_convert:to_binary(erlang:phash2({Id, Message})),
+     <<"push-api-", Phash/binary>>.
 
 
+maybe_retry(#{ ttl := 0 }) ->
+    %% No retry needed when TTL = 0
+    ok;
+maybe_retry(#{ ttl := TTL }) when TTL > 0 ->
+    throw(retry).
 
