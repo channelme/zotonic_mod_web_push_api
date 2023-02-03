@@ -42,19 +42,21 @@ var cotonic = cotonic || {};
 
     function unsubscribe(msg) {
         getSubscription()
-            .then(subscription => {
-                if(subscription === null) {
-                    maybeRespond(true, msg);
-                } else {
-                    subscription.unsubscribe();
-                }
-            })
-            .then(function(result) {
-                maybeRespond(result, msg);
-            })
-            .catch(function(err) {
-                maybeRespond({error: err}, msg);
-            })
+        .then(subscription => {
+            if(subscription === null) {
+                maybeRespond(true, msg);
+            } else {
+                return subscription.unsubscribe();
+            }
+        })
+        .then((result) => {
+            reportCurrentState();
+            maybeRespond(result, msg);
+        })
+        .catch((err) => {
+            reportCurrentState();
+            maybeRespond({error: err}, msg);
+        })
     }
 
     function subscribe(msg) {
@@ -70,7 +72,7 @@ var cotonic = cotonic || {};
             reportCurrentState();
             maybeRespond(subscription?subscription.toJSON():null, msg);
         })
-        .catch(function(err) {
+        .catch((err) => {
              console.warn(err);
              reportCurrentState();
              maybeRespond({error: err}, msg);
@@ -83,14 +85,14 @@ var cotonic = cotonic || {};
     
     function reportCurrentState() {
         getSubscription()
-        .then(function(subscription) {
+        .then((subscription) => {
             if(subscription) {
                 publishCurrentState(true);
             } else {
                 publishCurrentState(false);
             }
         })
-        .catch(function(err) {
+        .catch((err) => {
             publishCurrentState(false);
         })
     }

@@ -10,22 +10,15 @@
 {% block widget_content %}
 <div class="form-group">
     <div>
-        {% for s in m.web_push_api[id].subscriptions %}
-            {# [TODO] make this something more useful #}
-            {{ s | pprint }}
-        {% empty %}
-            <p class="help-block">{_ No subscriptions found. _}</p>
-        {% endfor %}
+        {% if m.web_push_api[id].subscriptions | length as nr_subscriptions %}
+            <p class="help-block">{{ nr_subscriptions }} {_ Push subscriptions stored. _}</p>
+        {% else %}
+            <p class="help-block">{_ No push subscriptions found. _}</p>
+        {% endif %}
     </div>
 
     <div>
-        {% wire name="store_subscription" postback={store_subscription} delegate="mod_web_push_api" %}
-        {% wire id=#webpush_subscribe.id action={script script="webPushSubscribe()" } %}
-        <button id="{{ #webpush_subscribe.id }}">{_ Subscribe _}</button>
-
-        {% wire id=#webpush_unsubscribe.id action={publish topic="model/webPush/post/unsubscribe" } %}
-        <button id="{{ #webpush_unsubscribe.id }}">{_ Unsubscribe _}</button>
-
+        {% live template="_admin_web_push_api_state.tpl" topic="webPush/event/#" id=id %} 
 
         {#
          # In order to subscribe, the browser of the user has to have:
@@ -33,9 +26,9 @@
          #   - Allowed notifications.
          #   - A web push subscription to the browser.
          #}
-
-         {% javascript %}
-             window.webPushSubscribe = function() {
+        {% wire name="store_subscription" postback={store_subscription} delegate="mod_web_push_api" %}
+        {% javascript %}
+             function webPushSubscribe() {
                  const publicKey = "{{ m.web_push_api.public_key }}";
                  cotonic.broker.call("model/webPush/post/subscribe", { applicationServerKey: publicKey,
                                                                        userVisibleOnly: true })
@@ -45,17 +38,31 @@
                  });
              }
 
-             cotonic.ready.then(function() {
-                 cotonic.broker.subscribe("model/notification/event/state", function(m) {
-                     console.log("ready");
-                 })
-             });
+             function webPushUnsubscribe() {
+                 cotonic.broker.publish("model/webPush/post/unsubscribe");
+             }
 
-             // This can be done to check if the current subscription is still valid.
-             // The server key could have been changed.
+             function checkSubscription() {
+                 cotonic.ready
+                 .then( () => cotonic.broker.call("model/webPush/get/subscription") )
+                 .then( (msg) => {
+                     const subscription = msg.payload;
+                     if(subscription) {
+                         cotonic.broker.publish("webPush/event/subscribed");
+                     } else {
+                         cotonic.broker.publish("webPush/event/unsubscribed");
+                     }
+                 });
+             }
+             checkSubscription();
+
+             // Register subscribe and unsubscribe
              cotonic.ready
-                 .then(() => cotonic.broker.call("model/webPush/get/subscription"))
-                 .then((connection) => console.log("conn", connection.payload))
+             .then( () => {
+                 cotonic.broker.subscribe("webPush/post/subscribe", webPushSubscribe);
+                 cotonic.broker.subscribe("webPush/post/unsubscribe", webPushUnsubscribe);
+                 cotonic.broker.subscribe("model/webPush/event/#", checkSubscription);
+             })
          {% endjavascript %}
     </div>
 </div>

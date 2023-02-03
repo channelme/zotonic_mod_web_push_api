@@ -37,23 +37,24 @@
 %% Example::
 %%
 %% ```
-%% mod_web_push_api:send(1, #{ type => notification,
-%%                             data => #{ title => <<"Hello">>,
-%%                                        options => #{ body => <<"World">>,
-%%                                                      data => #{ url => <<"/page/123">> }
-%%                                                    }
-%%                                     }
-%%                          },
-%%                          #{ ttl => 3600 },
-%%                          z:c(site_cafe)).
+%% mod_web_push_api:send(1,
+%%                       #{ type => notification,
+%%                          data => #{ title => <<"Hello">>,
+%%                                     options => #{ body => <<"World">>,
+%%                                                   data => #{ url => <<"/page/123">> }
+%%                                                }
+%%                                  }
+%%                       },
+%%                       #{ ttl => 3600 },
+%%                       z:c(site_cafe)).
 %% ```
 %%
 %% When this message is received by to cotonic service worker the 
 %% `showNotification` method of the registration will be called. 
 %% See: https://developer.mozilla.org/en-US/docs/Web/API/ServiceWorkerRegistration/showNotification
 %%
-%% The optional data field in the notification can be used by the service worker to
-%% redirect the user to the correct page.
+%% The optional url field in the extra data field in the notification
+%% can be used by the service worker to redirect the user to the correct page.
 %%
 
 -export([

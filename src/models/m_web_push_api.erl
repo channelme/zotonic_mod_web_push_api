@@ -39,7 +39,7 @@ m_get([User, <<"subscriptions">> | Rest], _Msg, Context) ->
     case z_acl:is_admin(Context) orelse UserId =:= z_acl:user(Context) of
         true ->
             UserId = m_rsc:rid(User, Context),
-            {ok, Result} = z_db:qmap("select * from identity where rsc_id = $1 and type = 'web_push_api_subscription'", [UserId], Context),
+            Result = m_identity:get_rsc_by_type(UserId, web_push_api_subscription, Context),
             {ok, {Result, Rest}};
         false ->
             {error, eaccess}
