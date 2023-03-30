@@ -16,58 +16,13 @@
     </div>
 
     <div>
+        {% wire type={mqtt topic="webPush/post/subscribe"} action={web_push_subscribe} %}
+        {% wire type="load" action={web_push_check_subscription
+                                       on_subscribed={publish topic="webPush/event/subscribed"}
+                                       on_unsubscribed={publish topic="webPush/event/unsubscribed"}
+                                       on_not_supported={publish topic="webPush/event/not_supported"} }
+         %}
         {% live template="_admin_web_push_api_state.tpl" topic="webPush/event/#" id=id %} 
-
-        {#
-         # In order to subscribe, the browser of the user has to have:
-         #   - A working service worker.
-         #   - Allowed notifications.
-         #   - A web push subscription to the browser.
-         #}
-        {% javascript %}
-             function webPushSubscribe() {
-                 const publicKey = "{{ m.web_push_api.public_key }}";
-                 cotonic.broker.call("model/webPush/post/subscribe", { applicationServerKey: publicKey,
-                                                                       userVisibleOnly: true })
-                 .then(msg => {
-                     return cotonic.broker.call("bridge/origin/model/web_push_api/post/store_subscription", msg.payload);
-                 })
-                 .then(msg => {
-                     // Success..
-                 })
-                 .catch((err) => {
-                     console.warn("Could not subscribe", err);
-                 });
-             }
-
-             function webPushUnsubscribe() {
-                 cotonic.broker.publish("model/webPush/post/unsubscribe");
-             }
-
-             function checkSubscription() {
-                 cotonic.ready
-                 .then( () => cotonic.broker.call("model/webPush/get/subscription") )
-                 .then( (msg) => {
-                     const subscription = msg.payload;
-                     if(subscription && subscription.endpoint) {
-                         cotonic.broker.publish("webPush/event/subscribed");
-                     } else if (subscription && subscription.error) {
-                         cotonic.broker.publish("webPush/event/not_supported");
-                     } else {
-                         cotonic.broker.publish("webPush/event/unsubscribed");
-                     }
-                 });
-             }
-             checkSubscription();
-
-             // Register subscribe and unsubscribe
-             cotonic.ready
-             .then( () => {
-                 cotonic.broker.subscribe("webPush/post/subscribe", webPushSubscribe);
-                 cotonic.broker.subscribe("webPush/post/unsubscribe", webPushUnsubscribe);
-                 cotonic.broker.subscribe("model/webPush/event/#", checkSubscription);
-             })
-         {% endjavascript %}
     </div>
 </div>
 {% endblock %}
