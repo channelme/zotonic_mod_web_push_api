@@ -25,8 +25,6 @@
 -mod_depends([]).
 
 -include_lib("zotonic_core/include/zotonic.hrl").
--include_lib("stdlib/include/assert.hrl").
-
 
 %%
 %% Push API documentation for the server side communication. 
@@ -59,55 +57,24 @@
 
 -export([
     init/1,
-    event/2
+    terminate/2
 ]).
 
 -export([
     send/3, send/4,
 
-    task_send/4,
-
-    retry_value/1
+    task_send/4
 ]).
 
-init(_Context) ->
-    start_httpc_profile(),
+%% @doc Initialize the web push api module. 
+init(Context) ->
+    start_http_client(Context),
     ok.
 
-event(#postback{message={store_subscription, _Args}}, Context) ->
-    case z_acl:user(Context) of
-        undefined ->
-            Context;
-        UserId ->
-            Endpoint = z_context:get_q(<<"endpoint">>, Context),
-            ExpirationTime = z_context:get_q(<<"expirationTime">>, Context),
-            Keys = z_context:get_q(<<"keys">>, Context),
-
-            Subscription = #{
-                             endpoint => Endpoint,
-                             keys => Keys
-                            },
-            Subscription1 = case ExpirationTime of
-                                undefined ->
-                                    Subscription;
-                                _ ->
-                                    Subscription#{ expirationTime => ExpirationTime }
-                            end,
-
-            %% The hash of the application server key under which the subscription was stored.
-            %% [TODO] Check if het key auth gedeelte gebruikt kan worden als Id van de subscription.
-            KeyHash = z_utils:hex_sha(base64url:decode(m_web_push_api:public_key(Context))),
-
-            %% Note: the data can also include an expiry date, but this is never set by browsers
-            Props = [{propb, ?DB_PROPS(Subscription1)}, % Store the subscription.
-                     {prop1, KeyHash}   % store hash of the key. Can be used check if the subscription is ready.
-                    ],
-
-            Id = z_utils:hex_sha(Endpoint),
-            {ok, _IdnId} = m_identity:insert(UserId, web_push_api_subscription, Id, Props, Context),
-
-            Context
-    end.
+%% @doc Terminate the web push api module. 
+terminate(_Reason, Context) ->
+    stop_http_client(Context),
+    ok.
 
 
 %% Exported api to send messages to a specific user id
@@ -161,14 +128,27 @@ task_send(Id, Message, Options, Context) ->
 %% Helpers
 %%
 
-start_httpc_profile() ->
-    inets:start(httpc, [{profile, ?MODULE}]).
+% @doc Start the http client which will be used to send send push
+% messages to the endpoints.
+start_http_client(Context) ->
+    Name = name(Context),
+    case inets:start(httpc, [{profile, Name}]) of
+        {ok, Pid} ->
+            {ok, Pid};
+        {error, {already_started, Pid}} ->
+            {ok, Pid}
+    end.
+
+% @doc The http client is no longer needed.
+stop_http_client(Context) ->
+    Name = name(Context),
+    inets:stop(httpc, Name).
 
 send_push(Message, Subscription, Options, Context) ->
     Request = z_webpush_crypto:make_request(Message, Subscription, Options, Context),
 
     %% TODO ssl certificate check.
-    case httpc:request(post, Request, [{ssl, [{versions, ['tlsv1.2', 'tlsv1.3']}]}], [], ?MODULE) of
+    case httpc:request(post, Request, [{ssl, [{versions, ['tlsv1.2', 'tlsv1.3']}]}], [], name(Context)) of
         {ok, {{_, 201, _}, _ResponseHeaders, _Body}} ->
             %% Ok... message recognized and sent.
             ok;
@@ -236,4 +216,9 @@ maybe_retry(#{ ttl := 0 }) ->
     ok;
 maybe_retry(#{ ttl := TTL }) when TTL > 0 ->
     throw(retry).
+
+% Return a name. This is used to get a private http client for
+% the module.
+name(Context) ->
+    z_utils:name_for_site(?MODULE, z_context:site(Context)).
 

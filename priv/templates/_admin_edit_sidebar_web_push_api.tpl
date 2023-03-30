@@ -1,8 +1,6 @@
 {% extends "admin_edit_widget_std.tpl" %}
 
-{% block widget_title %}
-{_ Web Push Notification _}
-{% endblock %}
+{% block widget_title %}{_ Web Push Notification _}{% endblock %}
 
 {% block widget_show_minimized %}true{% endblock %}
 {% block widget_id %}sidebar-web-push{% endblock %}
@@ -26,13 +24,14 @@
          #   - Allowed notifications.
          #   - A web push subscription to the browser.
          #}
-        {% wire name="store_subscription" postback={store_subscription} delegate="mod_web_push_api" %}
         {% javascript %}
              function webPushSubscribe() {
                  const publicKey = "{{ m.web_push_api.public_key }}";
                  cotonic.broker.call("model/webPush/post/subscribe", { applicationServerKey: publicKey,
                                                                        userVisibleOnly: true })
-                 .then(msg => z_event("store_subscription", msg.payload))
+                 .then(msg => {
+                     cotonic.broker.publish("bridge/origin/model/web_push_api/post/store_subscription", msg.payload);
+                 })
                  .catch((err) => {
                      console.warn("Could not subscribe", err);
                  });
