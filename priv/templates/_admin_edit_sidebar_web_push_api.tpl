@@ -9,11 +9,13 @@
 <div class="form-group">
     <div>
         {% if m.web_push_api[id].subscriptions | length as nr_subscriptions %}
-            <p class="help-block">{{ nr_subscriptions }} {_ Push subscriptions stored. _}</p>
+            <p class="help-block">{{ nr_subscriptions }} {_ push subscriptions stored. _}</p>
         {% else %}
             <p class="help-block">{_ No push subscriptions found. _}</p>
         {% endif %}
     </div>
+
+    <hr />
 
     <div>
         {% wire type={mqtt topic="webPush/post/subscribe"} action={web_push_subscribe} %}
@@ -21,7 +23,7 @@
                                        on_subscribed={publish topic="webPush/event/subscribed"}
                                        on_unsubscribed={publish topic="webPush/event/unsubscribed"}
                                        on_not_supported={publish topic="webPush/event/not_supported"} }
-         %}
+        %}
         {% live template="_admin_web_push_api_state.tpl" topic="webPush/event/#" id=id %} 
     </div>
 </div>
