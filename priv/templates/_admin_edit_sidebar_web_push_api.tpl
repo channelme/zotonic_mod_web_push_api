@@ -30,7 +30,10 @@
                  cotonic.broker.call("model/webPush/post/subscribe", { applicationServerKey: publicKey,
                                                                        userVisibleOnly: true })
                  .then(msg => {
-                     cotonic.broker.publish("bridge/origin/model/web_push_api/post/store_subscription", msg.payload);
+                     return cotonic.broker.call("bridge/origin/model/web_push_api/post/store_subscription", msg.payload);
+                 })
+                 .then(msg => {
+                     // Success..
                  })
                  .catch((err) => {
                      console.warn("Could not subscribe", err);

@@ -69,8 +69,7 @@ m_post([<<"store_subscription">>], #{ payload := #{ <<"keys">> := Keys,
             {error, eaccess};
         UserId ->
             ExpirationTime = maps:get(<<"expirationTime">>, Payload, undefined),
-            {ok, _} = m_web_push_api:store_subscription(UserId, Endpoint, Keys, ExpirationTime, Context),
-            Context
+            store_subscription(UserId, Endpoint, Keys, ExpirationTime, Context)
     end;
 
 m_post(V, _Msg, _Context) ->
