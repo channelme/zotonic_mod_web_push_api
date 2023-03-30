@@ -1,10 +1,10 @@
-{% if q.message.topic == "webPush/event/subscribed" %}
+{% if q.message.topic == "webPush/event/subscribed" or q.message.payload === true %}
     <p class="help-block">{_ ✅ This browser is subscribed. _}</p>
     <button class="btn btn-danger"
             data-onclick-topic="model/webPush/post/unsubscribe">
         {_ Unsubscribe _}
     </button>
-{% elif q.message.topic == "webPush/event/unsubscribed" %}
+{% elif q.message.topic == "webPush/event/unsubscribed" or q.message.payload === false %}
     <p class="help-block">{_ This browser is not subscribed. _}</p>
     <button class="btn btn-success"
             data-onclick-topic="webPush/post/subscribe">

@@ -24,7 +24,10 @@
                                        on_unsubscribed={publish topic="webPush/event/unsubscribed"}
                                        on_not_supported={publish topic="webPush/event/not_supported"} }
         %}
-        {% live template="_admin_web_push_api_state.tpl" topic="webPush/event/#" id=id %} 
+        {% live template="_admin_web_push_api_state.tpl"
+                id=id
+                topic="webPush/event/#"
+                topic="model/webPush/event/#" %} 
     </div>
 </div>
 {% endblock %}
