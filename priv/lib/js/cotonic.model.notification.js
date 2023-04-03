@@ -71,5 +71,5 @@ var cotonic = cotonic || {};
         }
     }
     
-    init();
+    cotonic.ready.then(init);
 }(cotonic));
