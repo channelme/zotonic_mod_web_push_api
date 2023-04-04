@@ -118,7 +118,7 @@ task_send(Id, Message, Options, Context) ->
                     ?LOG_INFO(#{text => <<"Endpoint requested retry">>, 'after' => After }),
                     {delay, After};
                 remove_subscription ->
-                    ?LOG_INFO(#{text => <<"Endpoint requested subscription deletion">>, id => Id }),
+                    ?LOG_INFO(#{text => <<"Endpoint requested deletion of subscription">>, id => Id }),
                     m_identity:delete(Id, Context),
                     ok
             end
