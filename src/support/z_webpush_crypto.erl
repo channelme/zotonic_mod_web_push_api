@@ -48,9 +48,9 @@ make_request(Message, #{ endpoint := Endpoint }=Subscription, Options, Context) 
 
     TTL = maps:get(ttl, Options, 0),
     Headers = [
-               { "TTL", z_convert:to_binary(TTL) },
-               { "Content-Encoding", <<"aesgcm">> },
-               { "Encryption", <<"salt=", (base64url:encode(Salt))/binary >> }
+               { "TTL", [z_convert:to_binary(TTL)] },
+               { "Content-Encoding", [<<"aesgcm">>] },
+               { "Encryption", [<<"salt=", (base64url:encode(Salt))/binary>>] }
                | CryptoHeaders
               ],
 
@@ -58,7 +58,7 @@ make_request(Message, #{ endpoint := Endpoint }=Subscription, Options, Context) 
                    undefined ->
                        Headers;
                    Topic ->
-                       [ {"Topic", z_convert:to_binary(Topic)} | Headers ]
+                       [ {"Topic", [z_convert:to_binary(Topic)]} | Headers ]
                end,
 
    { Endpoint, Headers1, "application/octetstream", CipherText }.
@@ -116,8 +116,8 @@ get_headers(Endpoint, ServerPublicKey, Context) ->
     JWK = to_jwk_key(PublicKey, PrivateKey),
     JWT = erljwt:create(es256, Payload, JWK),
 
-    [{"Authorization", <<"WebPush ", JWT/binary>> },
-     {"Crypto-Key", <<"dh=", ServerPublicKey/binary, $;, "p256ecdsa=", PublicKey/binary>>}
+    [{"Authorization", [<<"WebPush ", JWT/binary>>] },
+     {"Crypto-Key", [<<"dh=", ServerPublicKey/binary, $;, "p256ecdsa=", PublicKey/binary>>]}
      ].
 
 hkdf(IKM, Info, Salt, Length) ->

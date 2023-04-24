@@ -94,9 +94,6 @@ send(UserId, Message, Options, Context) ->
                   UniqueKey = unique_key(Id, Message, Options),
                   z_pivot_rsc:insert_task_after(0, ?MODULE, task_send, UniqueKey, [Id, Message, Options], Context)
               end || Subscription <- Subscriptions ],
-
-            %% Trigger a poll of the pivot queue to allow push messages to be sent
-            z_pivot_rsc:poll(Context),
             ok
     end.
 
