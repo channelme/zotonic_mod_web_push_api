@@ -68,6 +68,9 @@
 
 %% @doc Initialize the web push api module. 
 init(Context) ->
+    %% Make sure the module is configured.
+    _ = m_web_push_api:public_key(Context),
+
     start_http_client(Context),
     ok.
 
