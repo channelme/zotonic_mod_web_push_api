@@ -119,7 +119,14 @@ store_subscription(UserId, Endpoint, Keys, ExpirationTime, Context) ->
 get_public_key(Context) ->
     case m_config:get_value(mod_web_push_api, public_key, z_acl:sudo(Context)) of
         undefined ->
-            {error, not_configured};
+            %% API not configured, generate a new key.
+            #{ publicKey := PublicKey,
+               privateKey := PrivateKey } = z_webpush_crypto:generate_vapid_key(),
+
+            ok = m_config:set_value(mod_web_push_api, public_key, PublicKey, z_acl:sudo(Context)),
+            ok = m_config:set_value(mod_web_push_api, private_key, PublicKey, z_acl:sudo(Context)),
+
+            {ok, PublicKey};
         PublicKey ->
             {ok, PublicKey}
     end.
