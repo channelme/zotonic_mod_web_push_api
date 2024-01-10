@@ -72,8 +72,8 @@ m_post([<<"store_subscription">>], #{ payload := #{ <<"keys">> := Keys,
             store_subscription(UserId, Endpoint, Keys, ExpirationTime, Context)
     end;
 
-m_post(V, _Msg, _Context) ->
-    ?LOG_INFO("Unknown ~p post: ~p", [?MODULE, V]),
+m_post(V, Msg, _Context) ->
+    ?LOG_INFO("Unknown ~p post: ~p, msg: ~p", [?MODULE, V, Msg]),
     {error, unknown_path}.
 
 %%
