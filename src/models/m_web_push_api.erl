@@ -51,12 +51,8 @@ m_get([User, <<"subscriptions">> | Rest], _Msg, Context) ->
     end;
 
 m_get([<<"public_key">> | Rest], _Msg, Context) ->
-    case get_public_key(Context) of
-        {ok, PublicKey} ->
-            {ok, {PublicKey, Rest}};
-        {error, _}=Error->
-            Error
-    end;
+    {ok, PublicKey} = get_public_key(Context),
+    {ok, {PublicKey, Rest}};
 
 m_get(V, _Msg, _Context) ->
     ?LOG_INFO("Unknown ~p lookup: ~p", [?MODULE, V]),
@@ -124,7 +120,7 @@ get_public_key(Context) ->
                privateKey := PrivateKey } = z_webpush_crypto:generate_vapid_key(),
 
             ok = m_config:set_value(mod_web_push_api, public_key, PublicKey, z_acl:sudo(Context)),
-            ok = m_config:set_value(mod_web_push_api, private_key, PublicKey, z_acl:sudo(Context)),
+            ok = m_config:set_value(mod_web_push_api, private_key, PrivateKey, z_acl:sudo(Context)),
 
             {ok, PublicKey};
         PublicKey ->

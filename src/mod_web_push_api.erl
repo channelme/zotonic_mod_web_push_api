@@ -101,6 +101,7 @@ send(UserId, Message, Options, Context) ->
     end.
 
 % @doc Send the push notification. Async called by the task manager.
+-spec task_send(m_rsc:resource_id(), term(), map(), z:context()) -> ok | {delay, non_neg_integer()} | no_return().
 task_send(Id, Message, Options, Context) ->
     Payload = jsx:encode(Message),
 
@@ -114,6 +115,8 @@ task_send(Id, Message, Options, Context) ->
             case send_push(Payload, Subscription, Options, Context) of
                 ok ->
                     ok;
+                retry ->
+                    throw(retry);
                 {delay, After} ->
                     ?LOG_INFO(#{text => <<"Endpoint requested retry">>, 'after' => After }),
                     {delay, After};
@@ -148,6 +151,7 @@ send_push(Message, Subscription, Options, Context) ->
     Request = z_webpush_crypto:make_request(Message, Subscription, Options, Context),
 
     %% TODO ssl certificate check.
+    %%
     case httpc:request(post, Request, [{ssl, [{versions, ['tlsv1.2', 'tlsv1.3']}]}], [], name(Context)) of
         {ok, {{_, 201, _}, _ResponseHeaders, _Body}} ->
             %% Ok... message recognized and sent.
@@ -215,7 +219,7 @@ maybe_retry(#{ ttl := 0 }) ->
     %% No retry needed when TTL = 0
     ok;
 maybe_retry(#{ ttl := TTL }) when TTL > 0 ->
-    throw(retry).
+    retry.
 
 % Return a name. This is used to get a private http client for
 % the module.

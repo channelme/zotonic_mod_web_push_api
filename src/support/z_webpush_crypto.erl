@@ -37,7 +37,6 @@ generate_vapid_key() ->
 
 % @doc Create a request tuple which can be used to send a push notification to a client.
 make_request(Message, #{ endpoint := Endpoint }=Subscription, Options, Context) ->
-
     #{ salt := Salt,
        server_public_key := ServerPublicKey,
        ciphertext := CipherText } = encrypt(Message, Subscription, 0),
