@@ -1,5 +1,5 @@
 /**
- * Copyright 2023 The Cotonic Authors. All Rights Reserved.
+ * Copyright 2023-2025 The Cotonic Authors. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -44,18 +44,22 @@ var cotonic = cotonic || {};
         getSubscription()
         .then(subscription => {
             if(subscription === null) {
-                maybeRespond(true, msg);
+                maybeRespond({ result: true }, msg);
             } else {
-                return subscription.unsubscribe();
+                subscription.unsubscribe()
+                .then( (successful) => {
+                    reportCurrentState();
+                    maybeRespond({ result: true, endpoint: subscription.endpoint }, msg);
+                })
+                .catch((e) => {
+                    reportCurrentState();
+                    maybeRespond({ result: false, error: e }, msg);
+                });
             }
-        })
-        .then((result) => {
-            reportCurrentState();
-            maybeRespond(result, msg);
         })
         .catch((err) => {
             reportCurrentState();
-            maybeRespond({error: err}, msg);
+            maybeRespond({result: false, error: err}, msg);
         })
     }
 
@@ -101,7 +105,7 @@ var cotonic = cotonic || {};
         cotonic.broker.subscribe("model/webPush/get/subscription", (msg) => {
             getSubscription()
             .then(subscription => {
-                maybeRespond(subscription?subscription.toJSON():null, msg)
+                maybeRespond(subscription?subscription.toJSON():{}, msg)
             })
             .catch(err => {
                 maybeRespond({error: err}, msg)

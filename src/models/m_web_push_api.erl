@@ -34,6 +34,8 @@
     m_post/3
 ]).
 
+-define(IDENTITY_TYPE, web_push_api_subscription).
+
 
 %%
 %% Zotonic model callbacks
@@ -44,7 +46,7 @@ m_get([User, <<"subscriptions">> | Rest], _Msg, Context) ->
     case z_acl:is_admin(Context) orelse (UserId =/= undefined andalso UserId =:= z_acl:user(Context)) of
         true ->
             UserId = m_rsc:rid(User, Context),
-            Result = m_identity:get_rsc_by_type(UserId, web_push_api_subscription, Context),
+            Result = m_identity:get_rsc_by_type(UserId, ?IDENTITY_TYPE, Context),
             {ok, {Result, Rest}};
         false ->
             {error, eaccess}
@@ -67,7 +69,15 @@ m_post([<<"store_subscription">>], #{ payload := #{ <<"keys">> := Keys,
             ExpirationTime = maps:get(<<"expirationTime">>, Payload, undefined),
             store_subscription(UserId, Endpoint, Keys, ExpirationTime, Context)
     end;
-
+m_post([<<"delete_subscription">>], #{ payload := #{ <<"result">> := true,
+                                                     <<"endpoint">> := Endpoint } = Payload }, Context) ->
+    case z_acl:user(Context) of
+        undefined ->
+            {error, eaccess};
+        UserId ->
+            Key = make_key(Endpoint),
+            m_identity:delete_by_type_and_key(UserId, ?IDENTITY_TYPE, Key, Context)
+    end;
 m_post(V, Msg, _Context) ->
     ?LOG_INFO("Unknown ~p post: ~p, msg: ~p", [?MODULE, V, Msg]),
     {error, unknown_path}.
@@ -103,14 +113,15 @@ store_subscription(UserId, Endpoint, Keys, ExpirationTime, Context) ->
              {prop1, KeyHash}   % store hash of the key. Can be used check if the subscription is ready.
             ],
 
-    Id = z_utils:hex_sha(Endpoint),
-
-    m_identity:insert(UserId, web_push_api_subscription, Id, Props, Context).
-
+    Key = make_key(Endpoint),
+    m_identity:insert(UserId, ?IDENTITY_TYPE, Key, Props, Context).
 
 %%
 %% Helpers
 %%
+
+make_key(Endpoint) ->
+    z_utils:hex_sha(Endpoint).
 
 get_public_key(Context) ->
     case m_config:get_value(mod_web_push_api, public_key, z_acl:sudo(Context)) of
